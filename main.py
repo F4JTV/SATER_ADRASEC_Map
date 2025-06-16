@@ -4,10 +4,9 @@
 Script visant à afficher sur un carte les azimuts que les
 OM ont relevés dans le cadre d'un plan SATER
 """
-# TODO: Ajouter Menu
-# TODO: Pouvoir center la carte à l'endroit ou l'on souhaite à l'ouverture
-# TODO: Fond de carte différents
-# TODO: Exporter la carte (nom et path)
+# TODO: Implementer About
+# TODO: Implementer Start location
+# TODO: essayer d'avoir les cartes hors ligne
 
 import sys
 from pathlib import Path
@@ -21,7 +20,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget,
                              QVBoxLayout, QHBoxLayout, QHeaderView,
                              QTableWidget, QPushButton, QSpinBox,
                              QComboBox, QLineEdit, QStyle, QMenuBar,
-                             QMenu, QAction)
+                             QMenu, QAction, QFileDialog)
 
 
 def dms_to_dd(de, mi, se, di):
@@ -38,19 +37,45 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        # ############ Window Config ############
         self.setWindowTitle("SATER ADRASEC Map")
 
+        # ############ Attributes ############
+        self.rows = 0
+        self.actual_tiles = "OpenStreetMap.Mapnik"
+        self.m = folium.Map()
+
+        # ############ Menu ############
         self.menu_bar = QMenuBar(self)
         self.setMenuBar(self.menu_bar)
 
-        self.file_menu = QMenu("&Files")
+        self.file_menu = QMenu("&File")
         self.edit_menu = QMenu("&Edit")
         self.about_action = QAction("&About")
         self.menu_bar.addMenu(self.file_menu)
         self.menu_bar.addMenu(self.edit_menu)
         self.menu_bar.addAction(self.about_action)
 
-        # Files Actions
+        # Edit Menu
+        self.start_location_action = QAction("Start location")
+        self.change_tiles_menu = QMenu("Select tiles")
+        self.openstreetmap_default_action = QAction("OpenstreetMap")
+        self.openstreetmap_fr_action = QAction("OpenstreetMap France")
+        self.opentopomap_action = QAction("OpenTopoMap")
+        self.geoportail_plan_action = QAction("Geoportail Plan")
+        self.edit_menu.addAction(self.start_location_action)
+        self.edit_menu.addMenu(self.change_tiles_menu)
+        self.change_tiles_menu.addAction(self.openstreetmap_default_action)
+        self.change_tiles_menu.addAction(self.openstreetmap_fr_action)
+        self.change_tiles_menu.addAction(self.opentopomap_action)
+        self.change_tiles_menu.addAction(self.geoportail_plan_action)
+        self.start_location_action.triggered.connect(self.set_start_location)
+        self.openstreetmap_default_action.triggered.connect(self.set_openstreetmap_default)
+        self.openstreetmap_fr_action.triggered.connect(self.set_openstreetmap_fr)
+        self.opentopomap_action.triggered.connect(self.set_opentopomap)
+        self.geoportail_plan_action.triggered.connect(self.set_geoportail_plan)
+
+        # Menu Actions
         self.save_map_action = QAction("&Save map")
         self.file_menu.addAction(self.save_map_action)
         self.save_map_action.triggered.connect(self.save_map)
@@ -61,8 +86,7 @@ class MainWindow(QMainWindow):
         self.file_menu.addAction(self.exit_action)
         self.exit_action.triggered.connect(self.close)
 
-        self.rows = 0
-
+        # ############ Widgets ############
         self.main_widget = QWidget()
         self.main_layout = QHBoxLayout()
         self.main_widget.setLayout(self.main_layout)
@@ -76,6 +100,7 @@ class MainWindow(QMainWindow):
         self.add_btn.clicked.connect(self.add_row)
         self.left_layout.addWidget(self.add_btn)
 
+        # ############ Table ############
         self.table = QTableWidget()
         self.table.setMinimumWidth(600)
         self.table.setColumnCount(11)
@@ -98,8 +123,9 @@ class MainWindow(QMainWindow):
                                               "Sec", "Dir", "Deg", "Min",
                                               "Sec", "Dir", "Az", "Supp"])
         self.left_layout.addWidget(self.table)
-        self.add_row()
+        self.table.horizontalHeader().adjustSize()
 
+        # ############ HTML View ############
         self.view = QtWebEngineWidgets.QWebEngineView()
         self.view.setMinimumWidth(400)
         self.html = Path('./basemap.html').read_text(encoding="utf8")
@@ -113,13 +139,52 @@ class MainWindow(QMainWindow):
 
         QTimer.singleShot(500, self.showMaximized)
 
-    def save_map(self):
+    def set_start_location(self):
         pass
+
+    def set_tiles(self):
+        if self.rows > 0:
+            self.validate_data()
+        else:
+            self.m = folium.Map(location=NICE_LOC_DD, zoom_start=10, tiles=self.actual_tiles)
+            self.m.add_child(folium.LatLngPopup())
+            self.m.save("./map.html")
+            self.html = Path('./map.html').read_text(encoding="utf8")
+            self.view.load(QUrl.fromLocalFile(self.html))
+            self.view.setHtml(self.html)
+
+    def set_openstreetmap_default(self):
+        self.actual_tiles = "OpenStreetMap.Mapnik"
+        self.set_tiles()
+
+    def set_openstreetmap_fr(self):
+        self.actual_tiles = "OpenStreetMap.France"
+        self.set_tiles()
+
+    def set_opentopomap(self):
+        self.actual_tiles = "OpenTopoMap"
+        self.set_tiles()
+
+    def set_geoportail_plan(self):
+        self.actual_tiles = "GeoportailFrance.plan"
+        self.set_tiles()
+
+    def save_map(self):
+        file_name = QFileDialog.getSaveFileName(self, "Save HTML Map",
+                                                ".", "HTML file (*.html)")[0]
+
+        if file_name == "":
+            return
+
+        if not file_name.endswith(".html"):
+            file_name += ".html"
+
+        self.m.save(file_name)
         
     def validate_data(self):
         """ Parse data, construct map and display it """
-        m = folium.Map(location=NICE_LOC_DD, zoom_start=10, tiles="GeoportailFrance.plan")
-        m.add_child(folium.LatLngPopup())
+        self.m = folium.Map(location=NICE_LOC_DD, zoom_start=10, tiles=self.actual_tiles)
+        self.m.add_child(folium.LatLngPopup())
 
         for row in range(0, self.table.rowCount()):
             callsign = self.table.cellWidget(row, 0).text()
@@ -142,20 +207,19 @@ class MainWindow(QMainWindow):
                           popup=f"Latitude:{round(origin_point[0], 4)}\n"
                                 f"Longitude:{round(origin_point[1], 4)}",
                           tooltip=tooltip,
-                          icon=folium.Icon(color='red', icon='male', prefix="fa")).add_to(m)
+                          icon=folium.Icon(color='red', icon='male', prefix="fa")).add_to(self.m)
 
             end_lat = origin_point[0] + cos(radians(angle))
             end_lon = origin_point[1] + sin(radians(angle))
 
-            folium.PolyLine([origin_point, [end_lat, end_lon]]).add_to(m)
+            folium.PolyLine([origin_point, [end_lat, end_lon]]).add_to(self.m)
 
-        m.save("./map.html")
+        self.m.save("./map.html")
 
         self.html = Path('./map.html').read_text(encoding="utf8")
         self.view.load(QUrl.fromLocalFile(self.html))
         self.view.setHtml(self.html)
 
-    # noinspection PyTypeChecker
     def add_row(self):
         """ Add a row to the table """
         self.rows += 1
