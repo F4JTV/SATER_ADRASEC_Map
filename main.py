@@ -5,6 +5,7 @@ Script visant à afficher sur un carte les azimuts que les
 OM ont relevés dans le cadre d'un plan SATER
 """
 # TODO: Peupler About
+# TODO: Gérer les Regex des inputs
 
 from sys import argv
 from pathlib import Path
@@ -180,7 +181,7 @@ class MainWindow(QMainWindow):
             file_name += ".html"
 
         self.m.save(file_name)
-        
+
     def validate_data(self):
         """ Parse data, construct map and display it """
         self.m = Map(location=self.start_loc, zoom_start=6, tiles=self.actual_tiles)
@@ -205,10 +206,10 @@ class MainWindow(QMainWindow):
                 angle = azimut
 
                 Marker(location=origin_point,
-                              popup=f"Latitude:{round(origin_point[0], 4)}\n"
-                                    f"Longitude:{round(origin_point[1], 4)}",
-                              tooltip=tooltip,
-                              icon=Icon(color='red', icon='male', prefix="fa")).add_to(self.m)
+                       popup=f"Latitude:{round(origin_point[0], 4)}\n"
+                             f"Longitude:{round(origin_point[1], 4)}",
+                       tooltip=tooltip,
+                       icon=Icon(color='red', icon='male', prefix="fa")).add_to(self.m)
 
                 end_lat = origin_point[0] + cos(radians(angle))
                 end_lon = origin_point[1] + sin(radians(angle))
