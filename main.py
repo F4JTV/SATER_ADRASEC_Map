@@ -4,23 +4,21 @@
 Script visant à afficher sur un carte les azimuts que les
 OM ont relevés dans le cadre d'un plan SATER
 """
-# TODO: Implementer About
-# TODO: Implementer Start location
-# TODO: Cartes hors ligne
+# TODO: Peupler About
 
-import sys
+from sys import argv
 from pathlib import Path
 from math import cos, sin, radians
 
-import folium
-from PyQt5.QtCore import Qt, QRegExp, QTimer, QUrl
+from folium import Map, Marker, LatLngPopup, Icon, PolyLine
+from PyQt5.QtCore import Qt, QRegExp, QTimer, QUrl, QSize
 from PyQt5.QtGui import QRegExpValidator
 from PyQt5 import QtWebEngineWidgets
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget,
                              QVBoxLayout, QHBoxLayout, QHeaderView,
                              QTableWidget, QPushButton, QSpinBox,
                              QComboBox, QLineEdit, QStyle, QMenuBar,
-                             QMenu, QAction, QFileDialog)
+                             QMenu, QAction, QFileDialog, QDialog)
 
 
 def dms_to_dd(de, mi, se, di):
@@ -28,9 +26,6 @@ def dms_to_dd(de, mi, se, di):
     if di in ['W', 'S']:
         dd = -dd
     return dd
-
-
-NICE_LOC_DD = (dms_to_dd(43, 44, 12, "N"), dms_to_dd(7, 15, 27, "E"))
 
 
 class MainWindow(QMainWindow):
@@ -43,7 +38,9 @@ class MainWindow(QMainWindow):
         # ############ Attributes ############
         self.rows = 0
         self.actual_tiles = "OpenStreetMap.Mapnik"
-        self.m = folium.Map()
+        self.m = Map()
+        self.about_win = None
+        self.start_loc = (46.6796, 3.0761)
 
         # ############ Menu ############
         self.menu_bar = QMenuBar(self)
@@ -52,24 +49,22 @@ class MainWindow(QMainWindow):
         self.file_menu = QMenu("&File")
         self.edit_menu = QMenu("&Edit")
         self.about_action = QAction("&About")
+        self.about_action.triggered.connect(self.display_about_window)
         self.menu_bar.addMenu(self.file_menu)
         self.menu_bar.addMenu(self.edit_menu)
         self.menu_bar.addAction(self.about_action)
 
         # Edit Menu
-        self.start_location_action = QAction("Start location")
         self.change_tiles_menu = QMenu("Select tiles")
         self.openstreetmap_default_action = QAction("OpenstreetMap")
         self.openstreetmap_fr_action = QAction("OpenstreetMap France")
         self.opentopomap_action = QAction("OpenTopoMap")
         self.geoportail_plan_action = QAction("Geoportail Plan")
-        self.edit_menu.addAction(self.start_location_action)
         self.edit_menu.addMenu(self.change_tiles_menu)
         self.change_tiles_menu.addAction(self.openstreetmap_default_action)
         self.change_tiles_menu.addAction(self.openstreetmap_fr_action)
         self.change_tiles_menu.addAction(self.opentopomap_action)
         self.change_tiles_menu.addAction(self.geoportail_plan_action)
-        self.start_location_action.triggered.connect(self.set_start_location)
         self.openstreetmap_default_action.triggered.connect(self.set_openstreetmap_default)
         self.openstreetmap_fr_action.triggered.connect(self.set_openstreetmap_fr)
         self.opentopomap_action.triggered.connect(self.set_opentopomap)
@@ -139,15 +134,20 @@ class MainWindow(QMainWindow):
 
         QTimer.singleShot(500, self.showMaximized)
 
-    def set_start_location(self):
-        pass
+    def display_about_window(self):
+        """Display the about Window"""
+        if self.about_win is not None:
+            self.about_win.close()
+        self.about_win = AboutWindow(self)
+        self.about_win.setWindowFlags(Qt.WindowCloseButtonHint | Qt.WindowMinimizeButtonHint)
+        self.about_win.show()
 
     def set_tiles(self):
         if self.rows > 0:
             self.validate_data()
         else:
-            self.m = folium.Map(location=NICE_LOC_DD, zoom_start=10, tiles=self.actual_tiles)
-            self.m.add_child(folium.LatLngPopup())
+            self.m = Map(location=self.start_loc, zoom_start=6, tiles=self.actual_tiles)
+            self.m.add_child(LatLngPopup())
             self.m.save("./map.html")
             self.html = Path('./map.html').read_text(encoding="utf8")
             self.view.load(QUrl.fromLocalFile(self.html))
@@ -183,36 +183,39 @@ class MainWindow(QMainWindow):
         
     def validate_data(self):
         """ Parse data, construct map and display it """
-        self.m = folium.Map(location=NICE_LOC_DD, zoom_start=10, tiles=self.actual_tiles)
-        self.m.add_child(folium.LatLngPopup())
+        self.m = Map(location=self.start_loc, zoom_start=6, tiles=self.actual_tiles)
+        self.m.add_child(LatLngPopup())
 
-        for row in range(0, self.table.rowCount()):
-            callsign = self.table.cellWidget(row, 0).text()
-            lat_degre = int(self.table.cellWidget(row, 1).text())
-            lat_minute = int(self.table.cellWidget(row, 2).text())
-            lat_second = int(self.table.cellWidget(row, 3).text())
-            lat_dir = self.table.cellWidget(row, 4).currentText()
-            long_degre = int(self.table.cellWidget(row, 5).text())
-            long_minute = int(self.table.cellWidget(row, 6).text())
-            long_second = int(self.table.cellWidget(row, 7).text())
-            long_dir = self.table.cellWidget(row, 8).currentText()
-            azimut = int(self.table.cellWidget(row, 9).text().replace(" °", ""))
+        try:
+            for row in range(0, self.table.rowCount()):
+                callsign = self.table.cellWidget(row, 0).text()
+                lat_degre = int(self.table.cellWidget(row, 1).text())
+                lat_minute = int(self.table.cellWidget(row, 2).text())
+                lat_second = int(self.table.cellWidget(row, 3).text())
+                lat_dir = self.table.cellWidget(row, 4).currentText()
+                long_degre = int(self.table.cellWidget(row, 5).text())
+                long_minute = int(self.table.cellWidget(row, 6).text())
+                long_second = int(self.table.cellWidget(row, 7).text())
+                long_dir = self.table.cellWidget(row, 8).currentText()
+                azimut = int(self.table.cellWidget(row, 9).text().replace(" °", ""))
 
-            origin_point = [dms_to_dd(lat_degre, lat_minute, lat_second, lat_dir),
-                            dms_to_dd(long_degre, long_minute, long_second, long_dir)]
-            tooltip = callsign
-            angle = azimut
+                origin_point = [dms_to_dd(lat_degre, lat_minute, lat_second, lat_dir),
+                                dms_to_dd(long_degre, long_minute, long_second, long_dir)]
+                tooltip = callsign
+                angle = azimut
 
-            folium.Marker(location=origin_point,
-                          popup=f"Latitude:{round(origin_point[0], 4)}\n"
-                                f"Longitude:{round(origin_point[1], 4)}",
-                          tooltip=tooltip,
-                          icon=folium.Icon(color='red', icon='male', prefix="fa")).add_to(self.m)
+                Marker(location=origin_point,
+                              popup=f"Latitude:{round(origin_point[0], 4)}\n"
+                                    f"Longitude:{round(origin_point[1], 4)}",
+                              tooltip=tooltip,
+                              icon=Icon(color='red', icon='male', prefix="fa")).add_to(self.m)
 
-            end_lat = origin_point[0] + cos(radians(angle))
-            end_lon = origin_point[1] + sin(radians(angle))
+                end_lat = origin_point[0] + cos(radians(angle))
+                end_lon = origin_point[1] + sin(radians(angle))
 
-            folium.PolyLine([origin_point, [end_lat, end_lon]]).add_to(self.m)
+                PolyLine([origin_point, [end_lat, end_lon]]).add_to(self.m)
+        except ValueError:
+            pass
 
         self.m.save("./map.html")
 
@@ -279,8 +282,24 @@ class MainWindow(QMainWindow):
         self.rows -= 1
 
 
+class AboutWindow(QDialog):
+    def __init__(self, m):
+        super().__init__()
+
+        self.master = m
+
+        self.setWindowTitle(f"About SATER ADRASEC Map")
+        self.setModal(True)
+        self.setFixedSize(QSize(300, 300))
+        self.setWindowFlags(Qt.WindowCloseButtonHint)
+        x = self.master.geometry().x() + self.master.width() // 2 - self.width() // 2
+        y = self.master.geometry().y() + self.master.height() // 2 - self.height() // 2
+        self.setGeometry(x, y, 300, 300)
+        self.setContentsMargins(0, 0, 0, 0)
+
+
 if __name__ == '__main__':
-    app = QApplication(sys.argv)
+    app = QApplication(argv)
     window = MainWindow()
     window.show()
     app.exec()
