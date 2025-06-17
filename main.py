@@ -6,7 +6,7 @@ OM ont relevés dans le cadre d'un plan SATER
 """
 # TODO: Implementer About
 # TODO: Implementer Start location
-# TODO: essayer d'avoir les cartes hors ligne
+# TODO: Cartes hors ligne
 
 import sys
 from pathlib import Path
