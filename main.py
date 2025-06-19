@@ -5,15 +5,14 @@ Script visant à afficher sur un carte les azimuts que les
 OM ont relevés dans le cadre d'un plan SATER
 """
 # TODO: Peupler About
-# TODO: Gérer les Regex des inputs
 
 from sys import argv
 from pathlib import Path
 from math import cos, sin, radians
 
-from folium import Map, Marker, LatLngPopup, Icon, PolyLine
+from folium import Map, Marker, LatLngPopup, Icon, PolyLine, CustomIcon
 from PyQt5.QtCore import Qt, QRegExp, QTimer, QUrl, QSize
-from PyQt5.QtGui import QRegExpValidator
+from PyQt5.QtGui import QRegExpValidator, QIcon
 from PyQt5 import QtWebEngineWidgets
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget,
                              QVBoxLayout, QHBoxLayout, QHeaderView,
@@ -21,12 +20,35 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget,
                              QComboBox, QLineEdit, QStyle, QMenuBar,
                              QMenu, QAction, QFileDialog, QDialog)
 
+ICON = "./img/logo.jpg"
+
 
 def dms_to_dd(de, mi, se, di):
     dd = de + (mi / 60) + (se / 3600)
     if di in ['W', 'S']:
         dd = -dd
-    return dd
+    return round(dd, 4)
+
+
+def dd_to_dms(dd, lo_or_la):
+    di = str()
+    if lo_or_la == "lat":
+        if str(dd).startswith("-"):
+            di = "S"
+        else:
+            di = "N"
+    elif lo_or_la == "long":
+        if str(dd).startswith("-"):
+            di = "W"
+        else:
+            di = "E"
+
+    is_positive = dd >= 0
+    dd = abs(dd)
+    minutes, seconds = divmod(dd * 3600, 60)
+    degrees, minutes = divmod(minutes, 60)
+    degrees = degrees if is_positive else -degrees
+    return int(degrees), int(minutes), int(seconds), di
 
 
 class MainWindow(QMainWindow):
@@ -35,6 +57,7 @@ class MainWindow(QMainWindow):
 
         # ############ Window Config ############
         self.setWindowTitle("SATER ADRASEC Map")
+        self.setWindowIcon(QIcon(ICON))
 
         # ############ Attributes ############
         self.rows = 0
@@ -49,11 +72,11 @@ class MainWindow(QMainWindow):
 
         self.file_menu = QMenu("&File")
         self.edit_menu = QMenu("&Edit")
-        self.about_action = QAction("&About")
-        self.about_action.triggered.connect(self.display_about_window)
+        # self.about_action = QAction("&About")
+        # self.about_action.triggered.connect(self.display_about_window)
         self.menu_bar.addMenu(self.file_menu)
         self.menu_bar.addMenu(self.edit_menu)
-        self.menu_bar.addAction(self.about_action)
+        # self.menu_bar.addAction(self.about_action)
 
         # Edit Menu
         self.change_tiles_menu = QMenu("Select tiles")
@@ -190,13 +213,13 @@ class MainWindow(QMainWindow):
         try:
             for row in range(0, self.table.rowCount()):
                 callsign = self.table.cellWidget(row, 0).text()
-                lat_degre = int(self.table.cellWidget(row, 1).text())
-                lat_minute = int(self.table.cellWidget(row, 2).text())
-                lat_second = int(self.table.cellWidget(row, 3).text())
+                lat_degre = int(self.table.cellWidget(row, 1).text().strip())
+                lat_minute = int(self.table.cellWidget(row, 2).text().strip())
+                lat_second = int(self.table.cellWidget(row, 3).text().strip())
                 lat_dir = self.table.cellWidget(row, 4).currentText()
-                long_degre = int(self.table.cellWidget(row, 5).text())
-                long_minute = int(self.table.cellWidget(row, 6).text())
-                long_second = int(self.table.cellWidget(row, 7).text())
+                long_degre = int(self.table.cellWidget(row, 5).text().strip())
+                long_minute = int(self.table.cellWidget(row, 6).text().strip())
+                long_second = int(self.table.cellWidget(row, 7).text().strip())
                 long_dir = self.table.cellWidget(row, 8).currentText()
                 azimut = int(self.table.cellWidget(row, 9).text().replace(" °", ""))
 
@@ -206,9 +229,14 @@ class MainWindow(QMainWindow):
                 angle = azimut
 
                 Marker(location=origin_point,
-                       popup=f"Latitude:{round(origin_point[0], 4)}\n"
+                       popup=f"DMS:\n"
+                             f"Latitude:{lat_degre}°{lat_minute}'{lat_second}\"{lat_dir}\n"
+                             f"Longitude:{long_degre}°{long_minute}'{long_second}\"{long_dir}\n"
+                             f"DD:\n"
+                             f"Latitude:{round(origin_point[0], 4)}\n"
                              f"Longitude:{round(origin_point[1], 4)}",
                        tooltip=tooltip,
+                       # icon=CustomIcon("./img/logo.jpg", (48,48))).add_to(self.m)
                        icon=Icon(color='red', icon='male', prefix="fa")).add_to(self.m)
 
                 end_lat = origin_point[0] + cos(radians(angle))
@@ -231,11 +259,13 @@ class MainWindow(QMainWindow):
         col_1 = QLineEdit()
         col_1.setAlignment(Qt.AlignCenter)
         col_2 = QLineEdit()
-        col_2.setValidator(QRegExpValidator(QRegExp(r"^[0-9%]{1,2}$")))
+        col_2.setValidator(QRegExpValidator(QRegExp(r"^[0-9%]{1,3}$")))
         col_2.setAlignment(Qt.AlignCenter)
         col_3 = QLineEdit()
+        col_3.setValidator(QRegExpValidator(QRegExp(r"^[0-9%]{1,2}$")))
         col_3.setAlignment(Qt.AlignCenter)
         col_4 = QLineEdit()
+        col_4.setValidator(QRegExpValidator(QRegExp(r"^[0-9%]{1,2}$")))
         col_4.setAlignment(Qt.AlignCenter)
         col_5 = QComboBox()
         col_5.setEditable(True)
@@ -243,10 +273,13 @@ class MainWindow(QMainWindow):
         col_5.lineEdit().setAlignment(Qt.AlignCenter)
         col_5.addItems(["N", "S"])
         col_6 = QLineEdit()
+        col_6.setValidator(QRegExpValidator(QRegExp(r"^[0-9%]{1,3}$")))
         col_6.setAlignment(Qt.AlignCenter)
         col_7 = QLineEdit()
+        col_7.setValidator(QRegExpValidator(QRegExp(r"^[0-9%]{1,2}$")))
         col_7.setAlignment(Qt.AlignCenter)
         col_8 = QLineEdit()
+        col_8.setValidator(QRegExpValidator(QRegExp(r"^[0-9%]{1,2}$")))
         col_8.setAlignment(Qt.AlignCenter)
         col_9 = QComboBox()
         col_9.setEditable(True)
@@ -291,6 +324,7 @@ class AboutWindow(QDialog):
 
         self.setWindowTitle(f"About SATER ADRASEC Map")
         self.setModal(True)
+        self.setWindowIcon(QIcon(ICON))
         self.setFixedSize(QSize(300, 300))
         self.setWindowFlags(Qt.WindowCloseButtonHint)
         x = self.master.geometry().x() + self.master.width() // 2 - self.width() // 2
